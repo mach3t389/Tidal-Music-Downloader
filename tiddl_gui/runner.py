@@ -8,6 +8,7 @@ thread with `root.after(...)`.
 """
 from __future__ import annotations
 
+import os
 import queue
 import subprocess
 import threading
@@ -33,12 +34,14 @@ class DownloadRunner:
             self._process.terminate()
 
     def _run(self, command: list[str]) -> None:
+        env = {**os.environ, "PYTHONUNBUFFERED": "1"}
         self._process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            env=env,
         )
         assert self._process.stdout is not None
         for line in self._process.stdout:
