@@ -20,7 +20,6 @@ from tiddl_gui.commands import (
 )
 from tiddl_gui.progress import parse_track_line
 from tiddl_gui.runner import DownloadRunner
-from tiddl_gui.tiddl_api import NotLoggedInError
 from tiddl_gui.tiddl_api import get_preview as fetch_preview
 from tiddl_gui.tiddl_api import get_profile as fetch_profile
 
@@ -43,7 +42,7 @@ class Api:
         try:
             profile = fetch_profile()
             return {"ok": True, "email": profile.email, "country_code": profile.country_code}
-        except NotLoggedInError as exc:
+        except Exception as exc:
             return {"ok": False, "error": str(exc)}
 
     def get_preview(self, url: str) -> dict:
@@ -83,7 +82,7 @@ class Api:
         try:
             os.startfile(path)
             return {"ok": True}
-        except OSError as exc:
+        except Exception as exc:
             return {"ok": False, "error": str(exc)}
 
     def browse_folder(self, current_path: str) -> dict:
