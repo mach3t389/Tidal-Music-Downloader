@@ -74,9 +74,12 @@ class Api:
         return self._start(command, kind="download")
 
     def cancel(self) -> dict:
-        self._cancel_requested = True
-        self._runner.cancel()
-        return {"ok": True}
+        try:
+            self._cancel_requested = True
+            self._runner.cancel()
+            return {"ok": True}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
 
     def open_folder(self, path: str) -> dict:
         try:
@@ -86,54 +89,67 @@ class Api:
             return {"ok": False, "error": str(exc)}
 
     def browse_folder(self, current_path: str) -> dict:
-        root = Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        chosen = filedialog.askdirectory(
-            initialdir=current_path or os.path.expanduser("~")
-        )
-        root.destroy()
-        return {"ok": True, "path": chosen} if chosen else {"ok": False}
+        try:
+            root = Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            chosen = filedialog.askdirectory(
+                initialdir=current_path or os.path.expanduser("~")
+            )
+            root.destroy()
+            return {"ok": True, "path": chosen} if chosen else {"ok": False}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
 
     # -- internal ---------------------------------------------------------
 
     def _start(self, command: list[str], kind: str) -> dict:
-        if self._runner.is_running():
-            return {"ok": False, "error": "Un telechargement est deja en cours."}
-        self._current_kind = kind
-        self._cancel_requested = False
-        self._runner.start(command)
-        return {"ok": True}
+        try:
+            if self._runner.is_running():
+                return {"ok": False, "error": "Un telechargement est deja en cours."}
+            self._current_kind = kind
+            self._cancel_requested = False
+            self._runner.start(command)
+            return {"ok": True}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
 
     def poll_loop(self, window: "webview.Window") -> None:
         """Runs in the background thread pywebview starts via
         `webview.start(api.poll_loop, window)`. Drains the runner's queue
         and pushes each message into the page via `evaluate_js`, which is
-        safe to call from any thread."""
+        safe to call from any thread. The loop must never die on an
+        exception — that would permanently freeze the UI (no more `done`
+        messages could ever reach the page)."""
         while True:
             try:
                 kind, payload = self._queue.get(timeout=0.1)
             except queue.Empty:
                 continue
 
-            if kind == "line":
-                event = parse_track_line(str(payload))
-                message = {
-                    "type": "line",
-                    "text": str(payload),
-                    "track_event": (
-                        {"title": event.title, "status": event.status} if event else None
-                    ),
-                }
-            else:
-                message = {
-                    "type": "done",
-                    "code": payload,
-                    "kind": self._current_kind,
-                    "cancelled": self._cancel_requested,
-                }
+            try:
+                if kind == "line":
+                    event = parse_track_line(str(payload))
+                    message = {
+                        "type": "line",
+                        "text": str(payload),
+                        "track_event": (
+                            {"title": event.title, "status": event.status}
+                            if event
+                            else None
+                        ),
+                    }
+                else:
+                    message = {
+                        "type": "done",
+                        "code": payload,
+                        "kind": self._current_kind,
+                        "cancelled": self._cancel_requested,
+                    }
 
-            window.evaluate_js(f"window.onTiddlEvent({json.dumps(message)})")
+                window.evaluate_js(f"window.onTiddlEvent({json.dumps(message)})")
+            except Exception:
+                pass
 
 
 def main() -> None:

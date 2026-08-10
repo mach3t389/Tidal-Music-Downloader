@@ -72,19 +72,23 @@ def get_preview(url: str) -> list[TrackInfo]:
         return [_track_info_from_item(track)]
 
     if resource.type == "album":
-        album_items = api.getAlbumItems(resource.id)
-        return [
-            _track_info_from_item(entry.item)
-            for entry in album_items.items
-            if entry.type == "track"
-        ]
+        entries = _fetch_all_items(api.getAlbumItems, resource.id, limit=100)
+        return [_track_info_from_item(e.item) for e in entries if e.type == "track"]
 
     if resource.type == "playlist":
-        playlist_items = api.getPlaylistItems(resource.id)
-        return [
-            _track_info_from_item(entry.item)
-            for entry in playlist_items.items
-            if entry.type == "track"
-        ]
+        entries = _fetch_all_items(api.getPlaylistItems, resource.id, limit=50)
+        return [_track_info_from_item(e.item) for e in entries if e.type == "track"]
 
     raise ValueError(f"Preview not supported for resource type: {resource.type!r}")
+
+
+def _fetch_all_items(getter, resource_id: str, limit: int) -> list:
+    entries = []
+    offset = 0
+    while True:
+        page = getter(resource_id, limit=limit, offset=offset)
+        entries.extend(page.items)
+        if len(page.items) < limit:
+            break
+        offset += limit
+    return entries

@@ -111,9 +111,11 @@ def test_get_preview_for_a_playlist_filters_out_videos(monkeypatch):
         def __init__(self, token, user_id, country_code):
             pass
 
-        def getPlaylistItems(self, playlist_id):
+        def getPlaylistItems(self, playlist_id, limit=50, offset=0):
             assert playlist_id == "abc-123"
-            return SimpleNamespace(items=[track_entry, video_entry])
+            if offset == 0:
+                return SimpleNamespace(items=[track_entry, video_entry])
+            return SimpleNamespace(items=[])
 
     monkeypatch.setattr(tiddl_api, "TidalApi", FakeApi)
 
@@ -133,9 +135,11 @@ def test_get_preview_for_an_album(monkeypatch):
         def __init__(self, token, user_id, country_code):
             pass
 
-        def getAlbumItems(self, album_id):
+        def getAlbumItems(self, album_id, limit=100, offset=0):
             assert album_id == "999"
-            return SimpleNamespace(items=[track_entry])
+            if offset == 0:
+                return SimpleNamespace(items=[track_entry])
+            return SimpleNamespace(items=[])
 
     monkeypatch.setattr(tiddl_api, "TidalApi", FakeApi)
 
@@ -144,6 +148,34 @@ def test_get_preview_for_an_album(monkeypatch):
     assert tracks == [
         tiddl_api.TrackInfo(title="Album Track", artist="Artist B", duration_seconds=210)
     ]
+
+
+def test_get_preview_paginates_through_all_album_pages(monkeypatch):
+    monkeypatch.setattr(tiddl_api, "Config", FakeConfig)
+
+    page_one = [
+        SimpleNamespace(type="track", item=_track(f"Track {i}", "Artist", 100))
+        for i in range(100)
+    ]
+    page_two = [SimpleNamespace(type="track", item=_track("Track 100", "Artist", 100))]
+
+    class FakeApi:
+        def __init__(self, token, user_id, country_code):
+            pass
+
+        def getAlbumItems(self, album_id, limit=100, offset=0):
+            assert album_id == "999"
+            if offset == 0:
+                return SimpleNamespace(items=page_one)
+            return SimpleNamespace(items=page_two)
+
+    monkeypatch.setattr(tiddl_api, "TidalApi", FakeApi)
+
+    tracks = tiddl_api.get_preview("https://tidal.com/browse/album/999")
+
+    assert len(tracks) == 101
+    assert tracks[0].title == "Track 0"
+    assert tracks[100].title == "Track 100"
 
 
 def test_get_preview_falls_back_to_artists_list_when_artist_is_none(monkeypatch):
