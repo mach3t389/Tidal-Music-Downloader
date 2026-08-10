@@ -1,0 +1,3 @@
+tiddl==2.8.0
+pywebview==6.2.1
+requests
