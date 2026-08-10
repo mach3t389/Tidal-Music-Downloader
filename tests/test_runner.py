@@ -40,7 +40,6 @@ def test_runner_rejects_concurrent_start():
     command = [sys.executable, "-c", "import time; time.sleep(2)"]
 
     runner.start(command)
-    time.sleep(0.2)
     try:
         raised = False
         try:
@@ -71,3 +70,17 @@ def test_runner_cancel_stops_process_early():
     done = [m for m in messages if m[0] == "done"]
     assert len(done) == 1
     assert done[0][1] != 0
+
+
+def test_runner_reports_done_even_when_process_fails_to_start():
+    q = queue.Queue()
+    runner = DownloadRunner(q)
+    command = ["this-executable-does-not-exist-anywhere.exe"]
+
+    runner.start(command)
+    messages = _drain(q)
+
+    done = [m for m in messages if m[0] == "done"]
+    assert len(done) == 1
+    assert done[0][1] != 0
+    assert runner.is_running() is False
