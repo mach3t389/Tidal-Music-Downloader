@@ -5,7 +5,7 @@ they can be unit tested without spawning a real process.
 """
 from __future__ import annotations
 
-TIDDL_EXE = r"D:\Vibe Coding\tiddl\.venv\Scripts\tiddl.exe"
+TIDDL_EXE = r"D:\Vibe Coding\Tidal\tiddl\.venv\Scripts\tiddl.exe"
 DEFAULT_DOWNLOAD_PATH = r"C:\Users\BUREAU-ALEXIS\Music\Tiddl"
 
 QUALITY_LABELS = ["Normal", "High", "Master"]

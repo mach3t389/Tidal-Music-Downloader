@@ -9,7 +9,7 @@ and a plain-language status banner instead of a raw log.
 
 - The `tiddl` CLI's cached login at `~/tiddl.json` (created by `tiddl auth
   login` — see the sibling `tiddl` project at
-  `D:\Vibe Coding\tiddl\.venv\Scripts\tiddl.exe`, whose hardcoded path is
+  `D:\Vibe Coding\Tidal\tiddl\.venv\Scripts\tiddl.exe`, whose hardcoded path is
   referenced by `tiddl_gui/commands.py` for the actual download/login
   subprocess calls).
 - Python 3.12+ on Windows.
