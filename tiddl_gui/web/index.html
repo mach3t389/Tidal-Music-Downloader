@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Tiddl</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="profile-card" id="profile-card">
+      <button id="login-button" class="sidebar-button">Se connecter</button>
+      <div id="profile-info" class="profile-info hidden">
+        <span class="status-dot"></span>
+        <div>
+          <div id="profile-email" class="profile-email"></div>
+          <div id="profile-country" class="profile-country"></div>
+        </div>
+      </div>
+    </div>
+    <nav class="nav">
+      <button id="nav-favorites" class="nav-button active">Favoris</button>
+      <button id="nav-link" class="nav-button">Lien</button>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <section id="panel-favorites" class="panel">
+      <h1>Telecharger mes favoris</h1>
+      <p class="muted">Telecharge toutes tes pistes, albums, artistes et playlists favoris.</p>
+      <div class="controls">
+        <label>Qualite
+          <select id="favorites-quality"></select>
+        </label>
+        <label>Dossier
+          <div class="path-row">
+            <input id="favorites-path" type="text">
+            <button id="favorites-browse">Parcourir...</button>
+          </div>
+        </label>
+        <button id="favorites-start" class="primary">Telecharger mes favoris</button>
+      </div>
+    </section>
+
+    <section id="panel-link" class="panel hidden">
+      <h1>Telecharger un lien</h1>
+      <div class="controls">
+        <label>Lien Tidal
+          <input id="link-url" type="text" placeholder="https://tidal.com/browse/playlist/...">
+        </label>
+        <label>Qualite
+          <select id="link-quality"></select>
+        </label>
+        <label>Dossier
+          <div class="path-row">
+            <input id="link-path" type="text">
+            <button id="link-browse">Parcourir...</button>
+          </div>
+        </label>
+        <button id="link-start" class="primary">Telecharger ce lien</button>
+      </div>
+
+      <div id="preview-list" class="preview-list hidden"></div>
+    </section>
+
+    <div id="status-banner" class="status-banner hidden">
+      <span id="status-text"></span>
+      <button id="cancel-button" class="hidden">Annuler</button>
+      <button id="open-folder-button" class="hidden">Ouvrir le dossier</button>
+    </div>
+
+    <details id="log-details" class="log-details">
+      <summary>Voir les details</summary>
+      <pre id="log-output"></pre>
+    </details>
+  </main>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
