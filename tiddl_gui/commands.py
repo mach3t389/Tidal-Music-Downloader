@@ -24,7 +24,7 @@ def build_login_command() -> list[str]:
 
 def build_favorites_command(quality_label: str, download_path: str) -> list[str]:
     return [
-        TIDDL_EXE, "fav", "-r", "track", "download",
+        TIDDL_EXE, "fav", "download",
         "-q", quality_to_flag(quality_label),
         "-p", download_path,
     ]

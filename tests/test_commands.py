@@ -27,7 +27,7 @@ def test_build_login_command():
 def test_build_favorites_command():
     cmd = build_favorites_command("High", r"C:\Music")
     assert cmd == [
-        TIDDL_EXE, "fav", "-r", "track", "download",
+        TIDDL_EXE, "fav", "download",
         "-q", "high", "-p", r"C:\Music",
     ]
 

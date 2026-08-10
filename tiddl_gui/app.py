@@ -27,6 +27,7 @@ class TiddlGuiApp:
         self._queue: "queue.Queue[tuple[str, object]]" = queue.Queue()
         self._runner = DownloadRunner(self._queue)
         self._current_kind: str | None = None
+        self._cancel_requested = False
 
         self._download_path = tk.StringVar(value=DEFAULT_DOWNLOAD_PATH)
         self._quality = tk.StringVar(value="High")
@@ -128,6 +129,7 @@ class TiddlGuiApp:
             self._download_path.set(chosen)
 
     def _on_cancel(self) -> None:
+        self._cancel_requested = True
         self._runner.cancel()
 
     def _on_open_folder(self) -> None:
@@ -142,6 +144,7 @@ class TiddlGuiApp:
             )
             return
         self._current_kind = kind
+        self._cancel_requested = False
         self._append_log("$ " + " ".join(command))
         self._set_running_state(True)
         self._runner.start(command)
@@ -168,7 +171,21 @@ class TiddlGuiApp:
                         self._status.set("Connecte")
                     else:
                         self.open_folder_button.config(state="normal")
-                self._append_log(f"[termine, code {payload}]")
+                    self._append_log(f"[termine, code {payload}]")
+                    if self._current_kind != "login":
+                        messagebox.showinfo(
+                            "Telechargement termine",
+                            "Le telechargement est termine avec succes.",
+                        )
+                elif self._cancel_requested:
+                    self._append_log("[annule]")
+                else:
+                    self._append_log(f"[termine, code {payload}]")
+                    messagebox.showerror(
+                        "Echec",
+                        f"L'operation a echoue (code {payload}). Consulte le journal pour plus de details.",
+                    )
+                self._cancel_requested = False
         self.root.after(100, self._poll_queue)
 
     def _append_log(self, text: str) -> None:
