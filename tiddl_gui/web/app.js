@@ -99,6 +99,14 @@ function switchPanel(name) {
   el("panel-link").classList.toggle("hidden", name !== "link");
   el("nav-favorites").classList.toggle("active", name === "favorites");
   el("nav-link").classList.toggle("active", name === "link");
+  moveBannerNearActiveButton();
+}
+
+function moveBannerNearActiveButton() {
+  const activeButton = el("panel-favorites").classList.contains("hidden")
+    ? el("link-start")
+    : el("favorites-start");
+  activeButton.insertAdjacentElement("afterend", el("status-banner"));
 }
 
 let previewDebounce = null;
@@ -191,6 +199,7 @@ window.onTiddlEvent = function (message) {
 window.addEventListener("pywebviewready", async () => {
   await loadDefaults();
   await refreshProfile();
+  moveBannerNearActiveButton();
 
   el("login-button").addEventListener("click", async () => {
     hideBanner();
