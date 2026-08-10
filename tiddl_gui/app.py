@@ -1,12 +1,15 @@
-"""Tkinter window wiring the tiddl command builders and subprocess runner
-together. Not covered by automated tests — verified manually (see the
-plan's Task 5 checklist)."""
+"""pywebview entry point wiring commands.py, runner.py, tiddl_api.py and
+progress.py together behind a JS-callable Api class. Not covered by
+automated tests — verified manually (see the plan's manual checklist)."""
 from __future__ import annotations
 
+import json
 import os
 import queue
-import tkinter as tk
-from tkinter import filedialog, messagebox
+from pathlib import Path
+from tkinter import Tk, filedialog
+
+import webview
 
 from tiddl_gui.commands import (
     DEFAULT_DOWNLOAD_PATH,
@@ -15,190 +18,136 @@ from tiddl_gui.commands import (
     build_login_command,
     build_url_command,
 )
+from tiddl_gui.progress import parse_track_line
 from tiddl_gui.runner import DownloadRunner
+from tiddl_gui.tiddl_api import NotLoggedInError
+from tiddl_gui.tiddl_api import get_preview as fetch_preview
+from tiddl_gui.tiddl_api import get_profile as fetch_profile
+
+WEB_DIR = Path(__file__).parent / "web"
 
 
-class TiddlGuiApp:
-    def __init__(self, root: tk.Tk) -> None:
-        self.root = root
-        self.root.title("Tiddl - Telechargeur Tidal")
-        self.root.geometry("700x500")
-
+class Api:
+    def __init__(self) -> None:
         self._queue: "queue.Queue[tuple[str, object]]" = queue.Queue()
         self._runner = DownloadRunner(self._queue)
         self._current_kind: str | None = None
         self._cancel_requested = False
 
-        self._download_path = tk.StringVar(value=DEFAULT_DOWNLOAD_PATH)
-        self._quality = tk.StringVar(value="High")
-        self._url = tk.StringVar()
-        self._status = tk.StringVar(value="Non connecte")
+    # -- called from JS --------------------------------------------------
 
-        self._build_login_section()
-        self._build_download_section()
-        self._build_log_section()
+    def get_defaults(self) -> dict:
+        return {"quality_labels": QUALITY_LABELS, "default_path": DEFAULT_DOWNLOAD_PATH}
 
-        self.root.after(100, self._poll_queue)
+    def get_profile(self) -> dict:
+        try:
+            profile = fetch_profile()
+            return {"ok": True, "email": profile.email, "country_code": profile.country_code}
+        except NotLoggedInError as exc:
+            return {"ok": False, "error": str(exc)}
 
-    # -- UI construction ----------------------------------------------
+    def get_preview(self, url: str) -> dict:
+        try:
+            tracks = fetch_preview(url)
+            return {
+                "ok": True,
+                "tracks": [
+                    {
+                        "title": t.title,
+                        "artist": t.artist,
+                        "duration_seconds": t.duration_seconds,
+                    }
+                    for t in tracks
+                ],
+            }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
 
-    def _build_login_section(self) -> None:
-        frame = tk.Frame(self.root, padx=10, pady=10)
-        frame.pack(fill="x")
+    def start_login(self) -> dict:
+        return self._start(build_login_command(), kind="login")
 
-        self.login_button = tk.Button(frame, text="Se connecter", command=self._on_login)
-        self.login_button.pack(side="left")
+    def start_favorites(self, quality_label: str, download_path: str) -> dict:
+        command = build_favorites_command(quality_label, download_path)
+        return self._start(command, kind="download")
 
-        tk.Label(frame, textvariable=self._status).pack(side="left", padx=10)
+    def start_url(self, url: str, quality_label: str, download_path: str) -> dict:
+        command = build_url_command(url, quality_label, download_path)
+        return self._start(command, kind="download")
 
-    def _build_download_section(self) -> None:
-        frame = tk.Frame(self.root, padx=10, pady=5)
-        frame.pack(fill="x")
-
-        self.favorites_button = tk.Button(
-            frame, text="Telecharger mes favoris", command=self._on_download_favorites
-        )
-        self.favorites_button.grid(row=0, column=0, columnspan=3, sticky="w", pady=5)
-
-        tk.Label(frame, text="Lien Tidal :").grid(row=1, column=0, sticky="w")
-        tk.Entry(frame, textvariable=self._url, width=50).grid(row=1, column=1, sticky="we")
-        self.url_button = tk.Button(
-            frame, text="Telecharger ce lien", command=self._on_download_url
-        )
-        self.url_button.grid(row=1, column=2, padx=5)
-
-        tk.Label(frame, text="Qualite :").grid(row=2, column=0, sticky="w", pady=5)
-        tk.OptionMenu(frame, self._quality, *QUALITY_LABELS).grid(row=2, column=1, sticky="w")
-
-        tk.Label(frame, text="Dossier :").grid(row=3, column=0, sticky="w")
-        tk.Entry(frame, textvariable=self._download_path, width=50).grid(
-            row=3, column=1, sticky="we"
-        )
-        tk.Button(frame, text="Parcourir...", command=self._on_browse).grid(
-            row=3, column=2, padx=5
-        )
-
-        actions = tk.Frame(frame)
-        actions.grid(row=4, column=0, columnspan=3, sticky="w", pady=10)
-        self.cancel_button = tk.Button(
-            actions, text="Annuler", command=self._on_cancel, state="disabled"
-        )
-        self.cancel_button.pack(side="left")
-        self.open_folder_button = tk.Button(
-            actions, text="Ouvrir le dossier", command=self._on_open_folder, state="disabled"
-        )
-        self.open_folder_button.pack(side="left", padx=5)
-
-        frame.columnconfigure(1, weight=1)
-
-    def _build_log_section(self) -> None:
-        frame = tk.Frame(self.root, padx=10, pady=10)
-        frame.pack(fill="both", expand=True)
-
-        scrollbar = tk.Scrollbar(frame)
-        scrollbar.pack(side="right", fill="y")
-
-        self.log_text = tk.Text(
-            frame, wrap="word", yscrollcommand=scrollbar.set, state="disabled"
-        )
-        self.log_text.pack(fill="both", expand=True)
-        scrollbar.config(command=self.log_text.yview)
-
-    # -- Button handlers ------------------------------------------------
-
-    def _on_login(self) -> None:
-        self._start(build_login_command(), kind="login")
-
-    def _on_download_favorites(self) -> None:
-        command = build_favorites_command(self._quality.get(), self._download_path.get())
-        self._start(command, kind="download")
-
-    def _on_download_url(self) -> None:
-        url = self._url.get().strip()
-        if not url:
-            messagebox.showwarning("Lien manquant", "Colle un lien Tidal avant de telecharger.")
-            return
-        command = build_url_command(url, self._quality.get(), self._download_path.get())
-        self._start(command, kind="download")
-
-    def _on_browse(self) -> None:
-        chosen = filedialog.askdirectory(
-            initialdir=self._download_path.get() or os.path.expanduser("~")
-        )
-        if chosen:
-            self._download_path.set(chosen)
-
-    def _on_cancel(self) -> None:
+    def cancel(self) -> dict:
         self._cancel_requested = True
         self._runner.cancel()
+        return {"ok": True}
 
-    def _on_open_folder(self) -> None:
-        os.startfile(self._download_path.get())
+    def open_folder(self, path: str) -> dict:
+        try:
+            os.startfile(path)
+            return {"ok": True}
+        except OSError as exc:
+            return {"ok": False, "error": str(exc)}
 
-    # -- Process lifecycle ------------------------------------------------
+    def browse_folder(self, current_path: str) -> dict:
+        root = Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        chosen = filedialog.askdirectory(
+            initialdir=current_path or os.path.expanduser("~")
+        )
+        root.destroy()
+        return {"ok": True, "path": chosen} if chosen else {"ok": False}
 
-    def _start(self, command: list[str], kind: str) -> None:
+    # -- internal ---------------------------------------------------------
+
+    def _start(self, command: list[str], kind: str) -> dict:
         if self._runner.is_running():
-            messagebox.showinfo(
-                "Telechargement en cours", "Attends la fin du telechargement actuel."
-            )
-            return
+            return {"ok": False, "error": "Un telechargement est deja en cours."}
         self._current_kind = kind
         self._cancel_requested = False
-        self._append_log("$ " + " ".join(command))
-        self._set_running_state(True)
         self._runner.start(command)
+        return {"ok": True}
 
-    def _set_running_state(self, running: bool) -> None:
-        state = "disabled" if running else "normal"
-        self.login_button.config(state=state)
-        self.favorites_button.config(state=state)
-        self.url_button.config(state=state)
-        self.cancel_button.config(state="normal" if running else "disabled")
-
-    def _poll_queue(self) -> None:
+    def poll_loop(self, window: "webview.Window") -> None:
+        """Runs in the background thread pywebview starts via
+        `webview.start(api.poll_loop, window)`. Drains the runner's queue
+        and pushes each message into the page via `evaluate_js`, which is
+        safe to call from any thread."""
         while True:
             try:
-                kind, payload = self._queue.get_nowait()
+                kind, payload = self._queue.get(timeout=0.1)
             except queue.Empty:
-                break
-            if kind == "line":
-                self._append_log(str(payload))
-            elif kind == "done":
-                self._set_running_state(False)
-                if payload == 0:
-                    if self._current_kind == "login":
-                        self._status.set("Connecte")
-                    else:
-                        self.open_folder_button.config(state="normal")
-                    self._append_log(f"[termine, code {payload}]")
-                    if self._current_kind != "login":
-                        messagebox.showinfo(
-                            "Telechargement termine",
-                            "Le telechargement est termine avec succes.",
-                        )
-                elif self._cancel_requested:
-                    self._append_log("[annule]")
-                else:
-                    self._append_log(f"[termine, code {payload}]")
-                    messagebox.showerror(
-                        "Echec",
-                        f"L'operation a echoue (code {payload}). Consulte le journal pour plus de details.",
-                    )
-                self._cancel_requested = False
-        self.root.after(100, self._poll_queue)
+                continue
 
-    def _append_log(self, text: str) -> None:
-        self.log_text.config(state="normal")
-        self.log_text.insert("end", text + "\n")
-        self.log_text.see("end")
-        self.log_text.config(state="disabled")
+            if kind == "line":
+                event = parse_track_line(str(payload))
+                message = {
+                    "type": "line",
+                    "text": str(payload),
+                    "track_event": (
+                        {"title": event.title, "status": event.status} if event else None
+                    ),
+                }
+            else:
+                message = {
+                    "type": "done",
+                    "code": payload,
+                    "kind": self._current_kind,
+                    "cancelled": self._cancel_requested,
+                }
+
+            window.evaluate_js(f"window.onTiddlEvent({json.dumps(message)})")
 
 
 def main() -> None:
-    root = tk.Tk()
-    TiddlGuiApp(root)
-    root.mainloop()
+    api = Api()
+    window = webview.create_window(
+        "Tiddl",
+        str(WEB_DIR / "index.html"),
+        js_api=api,
+        width=1000,
+        height=700,
+        background_color="#121212",
+    )
+    webview.start(api.poll_loop, window, debug=False)
 
 
 if __name__ == "__main__":
